@@ -30,7 +30,7 @@ class Args:
     total_timesteps: int = 500000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
-    """the learning rate of the optimizer"""
+    """the learning rate of the optimiser"""
     num_steps: int = 128
     """the number of steps to run per policy rollout"""
     anneal_lr: bool = True

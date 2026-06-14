@@ -56,7 +56,7 @@ if __name__ == "__main__":
         "only discrete action spaces are supported"
 
     agent = Agent(env).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+    optimiser = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # Initial environment state
     next_obs_np, _ = env.reset(seed=args.seed)
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         # Learning rate annealing
         if args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / args.num_iterations
-            optimizer.param_groups[0]["lr"] = frac * args.learning_rate
+            optimiser.param_groups[0]["lr"] = frac * args.learning_rate
 
         # Collect rollout
         batch, next_obs, next_done, global_step, episode_stats = collect_rollout_from(
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         advantages, returns = compute_advantages(batch, agent, args, device)
 
         # PPO update
-        metrics = ppo_update(agent, optimizer, batch, advantages, returns, args)
+        metrics = ppo_update(agent, optimiser, batch, advantages, returns, args)
 
         # Logging
         sps = int(global_step / (time.time() - start_time))
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
         log_episode_stats(writer, episode_stats, global_step)
         log_training_metrics(writer, metrics, global_step)
-        log_infra_metrics(writer, optimizer, global_step, sps)
+        log_infra_metrics(writer, optimiser, global_step, sps)
 
     env.close()
     writer.close()

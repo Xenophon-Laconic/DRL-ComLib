@@ -30,7 +30,7 @@ def compute_advantages(batch: RolloutBatch, agent, args, device) -> tuple[torch.
     return advantages, returns
 
 
-def ppo_update(agent, optimizer, batch: RolloutBatch, advantages, returns, args):
+def ppo_update(agent, optimiser, batch: RolloutBatch, advantages, returns, args):
     """
     Run update_epochs passes of minibatch PPO updates over the batch.
     Returns a dict of training metrics for logging.
@@ -78,10 +78,10 @@ def ppo_update(agent, optimizer, batch: RolloutBatch, advantages, returns, args)
             entropy_loss = entropy.mean()
             loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
-            optimizer.zero_grad()
+            optimiser.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
-            optimizer.step()
+            optimiser.step()
 
         if args.target_kl is not None and approx_kl > args.target_kl:
             break

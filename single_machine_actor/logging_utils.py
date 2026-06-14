@@ -25,7 +25,7 @@ def log_training_metrics(writer: SummaryWriter, metrics: dict, global_step: int)
         writer.add_scalar(key, value, global_step)
 
 
-def log_infra_metrics(writer: SummaryWriter, optimizer, global_step: int, sps: int) -> None:
+def log_infra_metrics(writer: SummaryWriter, optimiser, global_step: int, sps: int) -> None:
     """Log learning rate and throughput."""
-    writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+    writer.add_scalar("charts/learning_rate", optimiser.param_groups[0]["lr"], global_step)
     writer.add_scalar("charts/SPS", sps, global_step)
