@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -16,33 +15,11 @@ class RolloutBatch:
     next_done: torch.Tensor   # scalar      — for bootstrap masking
 
 
-def collect_rollout(env, agent, args, device, writer=None, global_step=0):
-    """
-    Run the agent in the environment for args.num_steps steps.
-    Returns a RolloutBatch and the updated global_step.
-    """
-    obs      = torch.zeros((args.num_steps,) + env.observation_space.shape).to(device)
-    actions  = torch.zeros(args.num_steps, dtype=torch.long).to(device)
-    logprobs = torch.zeros(args.num_steps).to(device)
-    rewards  = torch.zeros(args.num_steps).to(device)
-    dones    = torch.zeros(args.num_steps).to(device)
-    values   = torch.zeros(args.num_steps).to(device)
-
-    next_obs, _ = env.reset() if global_step == 0 else (None, None)
-
-    # Carry next_obs/next_done across calls via the returned batch
-    # Caller is responsible for passing these in after the first rollout
-    raise NotImplementedError(
-        "Use collect_rollout_from(env, agent, args, device, next_obs, next_done)"
-    )
-
-
-def collect_rollout_from(env, agent, args, device, next_obs, next_done, writer=None, global_step=0):
+def collect_rollout_from(env, agent, args, device, next_obs, next_done, global_step=0):
     """
     Run the agent for args.num_steps steps starting from (next_obs, next_done).
-    Returns (RolloutBatch, next_obs, next_done, global_step).
-    next_obs and next_done are the state after the final step, ready for the
-    next rollout or bootstrap value computation.
+    Returns (RolloutBatch, next_obs, next_done, global_step, episode_stats).
+    episode_stats is a list of dicts, one per completed episode in this rollout.
     """
     obs      = torch.zeros((args.num_steps,) + env.observation_space.shape).to(device)
     actions  = torch.zeros(args.num_steps, dtype=torch.long).to(device)
@@ -50,6 +27,8 @@ def collect_rollout_from(env, agent, args, device, next_obs, next_done, writer=N
     rewards  = torch.zeros(args.num_steps).to(device)
     dones    = torch.zeros(args.num_steps).to(device)
     values   = torch.zeros(args.num_steps).to(device)
+
+    episode_stats = []
 
     for step in range(args.num_steps):
         global_step += 1
@@ -68,9 +47,11 @@ def collect_rollout_from(env, agent, args, device, next_obs, next_done, writer=N
         next_done = torch.tensor(float(termination or truncation)).to(device)
         rewards[step] = torch.tensor(reward, dtype=torch.float32).to(device)
 
-        if "episode" in info and writer is not None:
-            writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+        if "episode" in info:
+            episode_stats.append({
+                "charts/episodic_return": info["episode"]["r"],
+                "charts/episodic_length": info["episode"]["l"],
+            })
 
         if termination or truncation:
             next_obs_np, _ = env.reset()
@@ -87,4 +68,4 @@ def collect_rollout_from(env, agent, args, device, next_obs, next_done, writer=N
         next_done=next_done,
     )
 
-    return batch, next_obs, next_done, global_step
+    return batch, next_obs, next_done, global_step, episode_stats
