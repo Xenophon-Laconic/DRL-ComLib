@@ -55,15 +55,9 @@ if __name__ == "__main__":
             env, actor, args, device, next_obs, next_done, global_step
         )
 
-        batch.actor_id     = args.actor_id
-        batch.learner_step = comms.last_learner_step   # tracked inside ActorComms
-        # batch.collected_at already set by default_factory at construction time
-
         comms.send_batch(batch, episode_stats)
+        comms.sync_weights(actor)
 
-        new_weights = comms.recv_weights()   # non-blocking, returns None if nothing available
-        if new_weights is not None:
-            actor.load_state_dict(new_weights)
         # Print episodic returns locally
         for stat in episode_stats:
             print(f"[Actor] step={global_step} return={float(stat['charts/episodic_return']):.1f}")

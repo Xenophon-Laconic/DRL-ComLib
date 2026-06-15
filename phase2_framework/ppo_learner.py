@@ -46,7 +46,7 @@ if __name__ == "__main__":
     log_hyperparameters(writer, args)
 
     # comms
-    comms = LearnerComms(args.pull_addr, args.pub_addr, args.rep_addr)
+    comms = LearnerComms(args.pull_addr, args.pub_addr, args.rep_addr, device=device, buffer_size=args.buffer_size)
     # or use separate req_addr from args — see note below
     print("Learner ready, waiting for actor handshake...")
     comms.serve_initial_weights(agent.actor.state_dict())
@@ -63,7 +63,7 @@ if __name__ == "__main__":
             optimizer.param_groups[0]["lr"] = frac * args.learning_rate
 
         # Wait for one batch from any actor
-        batch, episode_stats = comms.recv_batch(device=device)
+        batch, episode_stats = comms.recv_batch()
 
         global_step += args.num_steps
         log_batch_meta(writer, batch, global_step)
@@ -74,7 +74,7 @@ if __name__ == "__main__":
                             learner_values=learner_values)
 
         # Broadcast updated actor weights
-        comms.broadcast_weights(agent.actor.state_dict(), step=iteration)
+        comms.broadcast_weights(agent, step=iteration)
 
         # Logging
         sps = int(global_step / (time.time() - start_time))

@@ -39,6 +39,8 @@ class ActorComms:
         return state_dict
 
     def send_batch(self, batch: RolloutBatch, episode_stats: list) -> None:
+        batch.actor_id     = self.actor_id
+        batch.learner_step = self.last_learner_step
         self._push.send(serialise((batch, episode_stats)))
 
     def recv_weights(self) -> dict | None:
@@ -49,6 +51,13 @@ class ActorComms:
             return state_dict
         return None
 
+    def sync_weights(self, agent) -> bool:
+        weights = self.recv_weights()
+        if weights is not None:
+            agent.load_state_dict(weights)
+            return True
+        return False
+
     def close(self) -> None:
         self._push.close()
         self._sub.close()
@@ -57,7 +66,9 @@ class ActorComms:
 
 
 class LearnerComms:
-    def __init__(self, pull_addr: str, pub_addr: str, rep_addr: str):
+    def __init__(self, pull_addr: str, pub_addr: str, rep_addr: str,
+                 device: torch.device = torch.device("cpu")):
+        self.device=device
         self._ctx = zmq.Context()
 
         self._pull = self._ctx.socket(zmq.PULL)
@@ -78,18 +89,18 @@ class LearnerComms:
                 return
         raise TimeoutError("No actor connected within 60s")
 
-    def recv_batch(self, device: torch.device, timeout_ms: int = 10000) -> tuple[RolloutBatch, list] | None:
+    def recv_batch(self, timeout_ms: int = 10000) -> tuple[RolloutBatch, list] | None:
         if self._pull.poll(timeout_ms):
             batch, episode_stats = deserialise(self._pull.recv())
             batch = RolloutBatch(
-                **{k: v.to(device) if isinstance(v, torch.Tensor) else v
+                **{k: v.to(self.device) if isinstance(v, torch.Tensor) else v
                    for k, v in batch.__dict__.items()}
             )
             return batch, episode_stats
         return None
 
-    def broadcast_weights(self, state_dict: dict, step: int) -> None:
-        self._pub.send_multipart([b"weights", serialise((state_dict, step))])
+    def broadcast_weights(self, agent, step: int) -> None:
+        self._pub.send_multipart([b"weights", serialise((agent.actor.state_dict(), step))])
 
     def close(self) -> None:
         self._pull.close()
