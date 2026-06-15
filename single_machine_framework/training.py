@@ -4,31 +4,29 @@ import torch.nn as nn
 from framework.protocol import RolloutBatch
 
 
-def compute_advantages(batch: RolloutBatch, agent, args, device) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Compute GAE advantages and returns from a completed rollout batch.
-    Returns (advantages, returns), both shape (num_steps,).
-    """
+def compute_advantages(batch: RolloutBatch, agent, args, device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     with torch.no_grad():
-        next_value = agent.get_value(batch.next_obs).squeeze()
-        advantages = torch.zeros_like(batch.rewards).to(device)
-        lastgaelam = 0
+        # Re-evaluate with learner's critic — batch.values from actor are all zeros
+        learner_values = agent.get_value(batch.obs).squeeze()     # (num_steps,)
+        next_value     = agent.get_value(batch.next_obs).squeeze() # scalar
+
+        advantages  = torch.zeros_like(batch.rewards).to(device)
+        lastgaelam  = 0
 
         for t in reversed(range(args.num_steps)):
             if t == args.num_steps - 1:
                 nextnonterminal = 1.0 - batch.next_done
-                nextvalues = next_value
+                nextvalues      = next_value
             else:
                 nextnonterminal = 1.0 - batch.dones[t + 1]
-                nextvalues = batch.values[t + 1]
+                nextvalues      = learner_values[t + 1]
 
-            delta = batch.rewards[t] + args.gamma * nextvalues * nextnonterminal - batch.values[t]
+            delta         = batch.rewards[t] + args.gamma * nextvalues * nextnonterminal - learner_values[t]
             advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
 
-        returns = advantages + batch.values
+        returns = advantages + learner_values
 
-    return advantages, returns
-
+    return advantages, returns, learner_values
 
 def ppo_update(
     agent,
@@ -38,6 +36,7 @@ def ppo_update(
     returns: torch.Tensor,
     args,
     weights: torch.Tensor | None = None,
+    learner_values: torch.Tensor | None = None,
 ):
     """
     Run update_epochs passes of minibatch PPO updates over the batch.
@@ -78,10 +77,11 @@ def ppo_update(
 
             # Value loss
             newvalue = newvalue.squeeze()
+            old_values = learner_values if learner_values is not None else batch.values
             if args.clip_vloss:
                 v_loss_unclipped = (newvalue - returns[mb_inds]) ** 2
-                v_clipped = batch.values[mb_inds] + torch.clamp(
-                    newvalue - batch.values[mb_inds], -args.clip_coef, args.clip_coef
+                v_clipped = old_values[mb_inds] + torch.clamp(
+                    newvalue - old_values[mb_inds], -args.clip_coef, args.clip_coef
                 )
                 v_loss = 0.5 * torch.max(v_loss_unclipped, (v_clipped - returns[mb_inds]) ** 2).mean()
             else:
@@ -98,7 +98,7 @@ def ppo_update(
         if args.target_kl is not None and approx_kl > args.target_kl:
             break
 
-    y_pred = batch.values.cpu().numpy()
+    y_pred = old_values.cpu().numpy()
     y_true = returns.cpu().numpy()
     var_y  = np.var(y_true)
     explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y

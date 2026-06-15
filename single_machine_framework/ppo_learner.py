@@ -8,7 +8,6 @@ import tyro
 
 from args import Args, compute_runtime_args, make_env
 from models import Agent
-from framework.protocol import RolloutBatch
 from training import compute_advantages, ppo_update
 from framework.comms import LearnerComms
 from logging_utils import (
@@ -17,6 +16,7 @@ from logging_utils import (
     log_episode_stats,
     log_training_metrics,
     log_infra_metrics,
+    log_batch_meta,
 )
 
 
@@ -66,10 +66,12 @@ if __name__ == "__main__":
         batch, episode_stats = comms.recv_batch(device=device)
 
         global_step += args.num_steps
+        log_batch_meta(writer, batch, global_step)
 
         # PPO update
-        advantages, returns = compute_advantages(batch, agent, args, device)
-        metrics = ppo_update(agent, optimizer, batch, advantages, returns, args)
+        advantages, returns, learner_values = compute_advantages(batch, agent, args, device)
+        metrics = ppo_update(agent, optimizer, batch, advantages, returns, args,
+                            learner_values=learner_values)
 
         # Broadcast updated actor weights
         comms.broadcast_weights(agent.actor.state_dict(), step=iteration)
