@@ -112,7 +112,14 @@ def compute_runtime_args(args: Args) -> Args:
     args.batch_size        = args.num_steps * args.learner_buffer_size
     args.minibatch_size    = int(args.batch_size // args.num_minibatches)
     args.num_iterations    = args.total_timesteps // args.batch_size  # learner updates
-    args.actor_num_iterations = args.num_iterations * args.learner_buffer_size  # actor rollouts
+    args.actor_num_iterations = args.num_iterations * (
+    args.learner_buffer_size // args.num_actors
+    )
+
+    assert args.learner_buffer_size % args.num_actors == 0, (
+    f"learner_buffer_size ({args.learner_buffer_size}) must be divisible by "
+    f"num_actors ({args.num_actors}) for even actor load distribution"
+    )
     return args
 
 

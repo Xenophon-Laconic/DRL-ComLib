@@ -52,6 +52,7 @@ class ActorComms:
         self._connected: bool = False
         self._push: zmq.Socket | None = None
         self._connect_push()
+        self._outage_ends_at: float = 0.0 
         # ─────────────────────────────────────────────────────────
 
     def _connect_push(self) -> None:
@@ -112,7 +113,12 @@ class ActorComms:
         self._cache.append((batch, episode_stats))  # always cache first
 
         if not self._connected:
-            # Attempt reconnect — recreate socket and try flush
+            if time.monotonic() < self._outage_ends_at:
+                # Outage window still active — stay disconnected
+                print(f"[Actor {self.actor_id}] Outage active — "
+                      f"{len(self._cache)} batch(es) cached.")
+                return False
+            # Outage window elapsed — reconnect and flush
             print(f"[Actor {self.actor_id}] Reconnecting PUSH socket...")
             self._connect_push()
 
@@ -143,16 +149,16 @@ class ActorComms:
 
     def simulate_outage(self, duration_s: float) -> None:
         """
-        Test helper: close the PUSH socket to simulate a network outage.
-        The actor loop continues collecting; batches accumulate in cache.
-        Call simulate_reconnect() or let send_batch() trigger reconnect automatically.
+        Test helper: kill the PUSH socket and set a timer.
+        The actor loop continues collecting freely; send_batch checks
+        the timer before attempting reconnect.
         """
         print(f"[Actor {self.actor_id}] ⚡ Simulating outage for {duration_s}s...")
-        self._push.close(linger=0)
-        self._push = None
+        if self._push is not None:
+            self._push.close(linger=0)
+            self._push = None
         self._connected = False
-        time.sleep(duration_s)
-        print(f"[Actor {self.actor_id}] Outage window ended — next send_batch will reconnect.")
+        self._outage_ends_at = time.monotonic() + duration_s  # ← timer not sleep
 
     def close(self) -> None:
         if self._push is not None:
