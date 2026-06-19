@@ -203,7 +203,7 @@ class LearnerComms:
                 self._rep.recv()           # consume b"ready"
                 self._rep.send(b"ack")     # acknowledge — "we see you, keep waiting"
                 connected += 1
-                f"[Learner] {connected}/{self._num_actors} actors ready."
+                print(f"[Learner] {connected}/{self._num_actors} actors ready.")
 
         # Phase 2 — all actors connected, broadcast weights simultaneously
         print("[Learner] All actors ready — broadcasting initial weights.")
