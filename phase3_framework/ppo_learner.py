@@ -55,6 +55,16 @@ if __name__ == "__main__":
         max_batches_per_actor=args.max_batches_per_actor,
         num_actors=args.num_actors,
     )
+
+    comms = LearnerComms(
+    pull_addr=f"tcp://*:{args.learner_port}",
+    pub_addr=f"tcp://*:{args.pub_port}",
+    rep_addr=f"tcp://*:{args.rep_port}",
+    buffer_size=args.learner_buffer_size,
+    max_batches_per_actor=max(1, args.learner_buffer_size // args.num_actors),
+    staleness_threshold=args.staleness_threshold,
+    )
+
     # or use separate req_addr from args — see note below
     print("Learner ready, waiting for actor handshake...")
     comms.serve_initial_weights(agent.actor.state_dict())
@@ -71,7 +81,7 @@ if __name__ == "__main__":
             optimizer.param_groups[0]["lr"] = frac * args.learning_rate
 
         # Wait for one batch from any actor
-        batch, episode_stats = comms.recv_batch()
+        batch, episode_stats = comms.recv_batch(writer=writer, global_step=global_step)
 
         global_step += args.num_steps * args.learner_buffer_size
         log_batch_meta(writer, batch, global_step)

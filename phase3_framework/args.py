@@ -83,8 +83,6 @@ class Args:
     """max batches from one actor per buffer fill. 0 = auto (learner_buffer_size // num_actors)"""
     actor_cache_size: int = 16
     """circular cache depth on actor side — how many batches to buffer during outage"""
-    staleness_threshold: float = float("inf")
-    """maximum age (seconds) a rollout batch may have before the learner discards it; inf = no filtering"""
 
     # to be filled in runtime
     batch_size: int = 0

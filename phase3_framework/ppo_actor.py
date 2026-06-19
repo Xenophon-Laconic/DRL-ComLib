@@ -54,12 +54,7 @@ if __name__ == "__main__":
     actor.load_state_dict(state_dict)
     print("Initial weights received, starting rollout.")
 
-    outage_triggered = False
     for iteration in range(1, args.actor_num_iterations + 1):
-
-        if global_step == 50 and not outage_triggered:
-            comms.simulate_outage(duration_s=20)
-            outage_triggered = True
 
         # Collect rollout using actor as a wrapper around get_action_and_value
         batch, next_obs, next_done, global_step, episode_stats = collect_rollout_from(

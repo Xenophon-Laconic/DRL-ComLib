@@ -173,8 +173,7 @@ class LearnerComms:
                 device: torch.device = torch.device("cpu"),
                 buffer_size: int = 1,
                 max_batches_per_actor: int = 1,
-                num_actors: int = 1,
-                staleness_threshold: float = float("inf"),):
+                num_actors: int = 1,):
         self.device = device
         self._buffer_size = buffer_size
         self._max_batches_per_actor = max_batches_per_actor
@@ -190,12 +189,6 @@ class LearnerComms:
 
         self._rep = self._ctx.socket(zmq.REP)
         self._rep.bind(rep_addr)
-
-        self._stats = {          # for TensorBoard logging
-            "batches_received": 0,
-            "batches_rejected_stale": 0,
-        }
-        self._staleness_threshold = staleness_threshold
     
     def serve_initial_weights(self, state_dict: dict, timeout_s: int = 60) -> None:
         """
@@ -223,40 +216,16 @@ class LearnerComms:
         time.sleep(0.1)  # brief pause so all SUB sockets are listening before PUB fires
         self._pub.send_multipart([b"weights", serialised])
 
-    def recv_batch(self, writer=None, global_step: int = 0) -> tuple[RolloutBatch, list]:
-        """Block until buffer_size *accepted* batches arrive, then return merged batch."""
+    def recv_batch(self) -> tuple[RolloutBatch, list]:
+        """Block until buffer_size batches have arrived, then return merged batch."""
         while len(self._buffer) < self._buffer_size:
-            self._pull.poll(timeout=1_000_000)
+            self._pull.poll(timeout=1000000)
             batch, episode_stats = deserialise(self._pull.recv())
             batch = RolloutBatch(
                 **{k: v.to(self.device) if isinstance(v, torch.Tensor) else v
                 for k, v in batch.__dict__.items()}
             )
-
-            accepted_before = len(self._buffer)
             self._append_to_buffer(batch, episode_stats)
-            batch_was_accepted = len(self._buffer) > accepted_before
-
-            # ── Starvation watchdog ───────────────────────────────────
-            if self._stats["batches_received"] % 100 == 0 and len(self._buffer) == 0:
-                print(f"[Learner] ⚠ Waiting for accepted batches — "
-                    f"{self._stats['batches_rejected_stale']} rejected so far "
-                    f"(τ={self._staleness_threshold:.1f}s)")
-            # ─────────────────────────────────────────────────────────
-
-            # Log rejection rate periodically for TensorBoard
-            if writer and self._stats["batches_received"] % 20 == 0:
-                rejection_rate = (
-                    self._stats["batches_rejected_stale"] /
-                    max(1, self._stats["batches_received"])
-                )
-                writer.add_scalar("staleness/rejection_rate", rejection_rate, global_step)
-                if batch_was_accepted:
-                    writer.add_scalar(
-                        "staleness/batch_age_s",
-                        time.monotonic() - batch.collected_at,
-                        global_step
-                    )
 
         ready, self._buffer = self._buffer, []
         merged_batch = _concat_batches([b for b, _ in ready])
@@ -264,28 +233,16 @@ class LearnerComms:
         return merged_batch, merged_stats
     
     def _append_to_buffer(self, batch: RolloutBatch, episode_stats: list) -> None:
-        """Single entry point for all buffer writes. Enforces staleness + per-actor cap."""
-        self._stats["batches_received"] += 1
-
-        # ── Staleness filter ─────────────────────────────────────────────────
-        age = time.monotonic() - batch.collected_at
-        if age > self._staleness_threshold:
-            self._stats["batches_rejected_stale"] += 1
-            print(
-                f"[Learner] Dropped stale batch from actor {batch.actor_id}: "
-                f"age={age:.2f}s > τ={self._staleness_threshold:.2f}s"
-            )
-            return   # ← do NOT append; buffer stays unchanged
-        # ─────────────────────────────────────────────────────────────────────
-
-        # Per-actor cap (unchanged from Phase 3)
+        """Single entry point for all buffer writes. Enforces per-actor cap."""
         actor_count = sum(1 for b, _ in self._buffer if b.actor_id == batch.actor_id)
         if actor_count >= self._max_batches_per_actor:
             for i, (b, _) in enumerate(self._buffer):
                 if b.actor_id == batch.actor_id:
+                    print(f"[Learner] actor {batch.actor_id} cap reached "
+                        f"({actor_count}/{self._max_batches_per_actor}) "
+                        f"— dropping oldest batch")
                     self._buffer.pop(i)
                     break
-
         self._buffer.append((batch, episode_stats))
 
     def broadcast_weights(self, agent, step: int) -> None:
