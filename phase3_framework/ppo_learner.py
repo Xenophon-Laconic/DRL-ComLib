@@ -56,15 +56,6 @@ if __name__ == "__main__":
         num_actors=args.num_actors,
     )
 
-    comms = LearnerComms(
-    pull_addr=f"tcp://*:{args.learner_port}",
-    pub_addr=f"tcp://*:{args.pub_port}",
-    rep_addr=f"tcp://*:{args.rep_port}",
-    buffer_size=args.learner_buffer_size,
-    max_batches_per_actor=max(1, args.learner_buffer_size // args.num_actors),
-    staleness_threshold=args.staleness_threshold,
-    )
-
     # or use separate req_addr from args — see note below
     print("Learner ready, waiting for actor handshake...")
     comms.serve_initial_weights(agent.actor.state_dict())

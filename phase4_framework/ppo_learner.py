@@ -22,7 +22,8 @@ from logging_utils import (
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    args.exp_name = os.path.basename(__file__)[: -len(".py")]
+    if not args.exp_name:
+        args.exp_name = os.path.basename(__file__)[: -len(".py")]
     args = compute_runtime_args(args)
 
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -54,8 +55,10 @@ if __name__ == "__main__":
         buffer_size=args.learner_buffer_size,
         max_batches_per_actor=args.max_batches_per_actor,
         num_actors=args.num_actors,
+        staleness_threshold=args.staleness_threshold,
     )
-    # or use separate req_addr from args — see note below
+
+    print(f"[Learner] τ = {args.staleness_threshold}")
     print("Learner ready, waiting for actor handshake...")
     comms.serve_initial_weights(agent.actor.state_dict())
     print("Initial weights sent to actor.")
@@ -71,7 +74,7 @@ if __name__ == "__main__":
             optimizer.param_groups[0]["lr"] = frac * args.learning_rate
 
         # Wait for one batch from any actor
-        batch, episode_stats = comms.recv_batch()
+        batch, episode_stats = comms.recv_batch(writer=writer, global_step=global_step)
 
         global_step += args.num_steps * args.learner_buffer_size
         log_batch_meta(writer, batch, global_step)

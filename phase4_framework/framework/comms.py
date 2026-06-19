@@ -269,6 +269,7 @@ class LearnerComms:
 
         # ── Staleness filter ─────────────────────────────────────────────────
         age = time.monotonic() - batch.collected_at
+        print(f"[Learner] Batch age: {age:.2f}s (threshold: {self._staleness_threshold:.1f}s)")
         if age > self._staleness_threshold:
             self._stats["batches_rejected_stale"] += 1
             print(
