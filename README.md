@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="logo.png" alt="DRL-ComLib logo" width="800">
+</p>
+
+# DRL-ComLib
+
 # DRL-ComLib
 
 A communication-focused framework for distributed reinforcement learning across processes, networks, and devices, built around a lightweight distributed PPO example using ZeroMQ sockets and actor-learner coordination.
