@@ -81,7 +81,7 @@ class Args:
     """batches to accumulate before each PPO update. 0 = auto (2 * num_actors)"""
     max_batches_per_actor: int = 0
     """max batches from one actor per buffer fill. 0 = auto (learner_buffer_size // num_actors)"""
-    actor_cache_size: int = 16
+    actor_cache_size: int = 4
     """circular cache depth on actor side — how many batches to buffer during outage"""
     staleness_threshold: float = float("inf")
     """maximum age (seconds) a rollout batch may have before the learner discards it; inf = no filtering"""
@@ -89,11 +89,11 @@ class Args:
     """seconds to wait for full buffer before proceeding with partial batch"""
     weighting_strategy: str = "uniform"
     """Experience weighting strategy: 'uniform' | 'latency' | 'is'"""
+    enable_policy_reset: bool = True
+    """Enable learner-triggered per-actor reset when an actor stays stale."""
+
     reset_stale_after: int = 5
     """Reset an actor after this many consecutive stale batches."""
-
-    enable_policy_reset: bool = True
-    """Enable learner-triggered per-actor reset logic."""
 
     # to be filled in runtime
     batch_size: int = 0
