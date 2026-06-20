@@ -6,6 +6,8 @@ from collections import deque
 
 from framework.protocol import RolloutBatch
 
+WEIGHTS_TOPIC = b"weights"
+SHUTDOWN_TOPIC = b"shutdown"
 
 def serialise(obj) -> bytes:
     return pickle.dumps(obj, protocol=5)
@@ -39,7 +41,8 @@ class ActorComms:
 
         self._sub = self._ctx.socket(zmq.SUB)
         self._sub.connect(sub_addr)
-        self._sub.setsockopt_string(zmq.SUBSCRIBE, "weights")
+        self._sub.setsockopt(zmq.SUBSCRIBE, WEIGHTS_TOPIC)
+        self._sub.setsockopt(zmq.SUBSCRIBE, SHUTDOWN_TOPIC)
 
         self._req = self._ctx.socket(zmq.REQ)
         self._req.connect(req_addr)
@@ -54,6 +57,7 @@ class ActorComms:
         self._connect_push()
         self._outage_ends_at: float = 0.0 
         # ─────────────────────────────────────────────────────────
+
 
     def _connect_push(self) -> None:
         """Create (or recreate) the PUSH socket and mark as connected."""
@@ -94,7 +98,9 @@ class ActorComms:
         print(f"[Actor {self.actor_id}] Registered with learner, waiting for all actors...")
 
         self._sub.poll(timeout=None)
-        _, payload = self._sub.recv_multipart()
+        topic, payload = self._sub.recv_multipart()
+        assert topic == WEIGHTS_TOPIC, f"Expected initial weights, got topic {topic!r}"
+        state_dict, step = deserialise(payload)
         state_dict, step = deserialise(payload)
         self.last_learner_step = step
         print(f"[Actor {self.actor_id}] All actors ready — starting rollout.")
@@ -132,20 +138,44 @@ class ActorComms:
         return True
 
 
-    def recv_weights(self) -> dict | None:
+    def recv_weights(self) -> dict | str | None:
+        """
+        Returns:
+            dict      -> new actor weights received
+            "shutdown" -> learner requested clean termination
+            None      -> no message available right now
+        """
         if self._sub.poll(0):
-            _, payload = self._sub.recv_multipart()
-            state_dict, step = deserialise(payload)
-            self.last_learner_step = step
-            return state_dict
+            topic, payload = self._sub.recv_multipart()
+
+            if topic == SHUTDOWN_TOPIC:
+                return "shutdown"
+
+            if topic == WEIGHTS_TOPIC:
+                state_dict, step = deserialise(payload)
+                self.last_learner_step = step
+                return state_dict
+
+            print(f"[Actor {self.actor_id}] Unknown PUB topic: {topic!r}")
         return None
 
-    def sync_weights(self, agent) -> bool:
-        weights = self.recv_weights()
-        if weights is not None:
-            agent.load_state_dict(weights)
-            return True
-        return False
+    def sync_weights(self, agent) -> str:
+        """
+        Returns:
+            "updated"   -> weights applied
+            "shutdown"  -> learner requested shutdown
+            "none"      -> no message available
+        """
+        msg = self.recv_weights()
+
+        if msg is None:
+            return "none"
+
+        if msg == "shutdown":
+            return "shutdown"
+
+        agent.load_state_dict(msg)
+        return "updated"
 
     def simulate_outage(self, duration_s: float) -> None:
         """
@@ -221,7 +251,7 @@ class LearnerComms:
         # Phase 2 — all actors connected, broadcast weights simultaneously
         print("[Learner] All actors ready — broadcasting initial weights.")
         time.sleep(0.1)  # brief pause so all SUB sockets are listening before PUB fires
-        self._pub.send_multipart([b"weights", serialised])
+        self._pub.send_multipart([WEIGHTS_TOPIC, serialised])
 
     def recv_batch(self, writer=None, global_step: int = 0,
                 partial_flush_timeout_s: float = 5.0) -> tuple[RolloutBatch, list]:
@@ -304,7 +334,12 @@ class LearnerComms:
         self._buffer.append((batch, episode_stats))
 
     def broadcast_weights(self, agent, step: int) -> None:
-        self._pub.send_multipart([b"weights", serialise((agent.actor.state_dict(), step))])
+        self._pub.send_multipart([WEIGHTS_TOPIC, serialise((agent.actor.state_dict(), step))])
+
+    def broadcast_shutdown(self) -> None:
+        """Broadcast a clean shutdown signal to all subscribed actors."""
+        self._pub.send_multipart([SHUTDOWN_TOPIC, b""])
+        print("[Learner] Shutdown signal broadcast.")
 
     def close(self) -> None:
         self._pull.close()

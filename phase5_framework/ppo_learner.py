@@ -110,5 +110,8 @@ if __name__ == "__main__":
         log_infra_metrics(writer, optimizer, global_step, sps)
         log_episode_stats(writer, episode_stats, global_step)
 
+    comms.broadcast_shutdown()
+    time.sleep(1)   # give SUB sockets time to receive the PUB message
+
     writer.close()
     comms.close()
