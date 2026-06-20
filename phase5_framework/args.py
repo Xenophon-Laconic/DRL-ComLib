@@ -87,6 +87,8 @@ class Args:
     """maximum age (seconds) a rollout batch may have before the learner discards it; inf = no filtering"""
     partial_flush_timeout_s: float = 5.0
     """seconds to wait for full buffer before proceeding with partial batch"""
+    weighting_strategy: str = "uniform"
+    """Experience weighting strategy: 'uniform' | 'latency' | 'is'"""
 
     # to be filled in runtime
     batch_size: int = 0
