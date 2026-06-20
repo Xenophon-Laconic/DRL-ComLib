@@ -2,10 +2,6 @@
   <img src="logo.png" alt="DRL-ComLib logo" width="800">
 </p>
 
-# DRL-ComLib
-
-# DRL-ComLib
-
 A communication-focused framework for distributed reinforcement learning across processes, networks, and devices, built around a lightweight distributed PPO example using ZeroMQ sockets and actor-learner coordination.
 
 The main contribution of this repository is the communication framework in `framework/`, which handles actor-learner synchronisation, rollout transport, weight broadcasts, staleness-aware batch handling, resets, and shutdown signaling. The PPO training loop and model structure are intentionally compact and are based on the CleanRL style of single-file PPO implementations rather than being the primary contribution.
