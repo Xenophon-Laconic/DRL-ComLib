@@ -1,10 +1,2 @@
 __pycache__/
-runs/
-videos/
 .venv/
-image.py 
-output/
-figures/
-averages/
-average_tboard_returns.py
-*.png

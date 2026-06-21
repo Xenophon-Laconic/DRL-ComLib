@@ -2,20 +2,28 @@
   <img src="logo.png" alt="DRL-ComLib logo" width="800">
 </p>
 
+## DRL-ComLib
+
 A communication-focused framework for distributed reinforcement learning across processes, networks, and devices, built around a lightweight distributed PPO example using ZeroMQ sockets and actor-learner coordination.
 
 The main contribution of this repository is the communication framework in `framework/`, which handles actor-learner synchronisation, rollout transport, weight broadcasts, staleness-aware batch handling, resets, and shutdown signaling. The PPO training loop and model structure are intentionally compact and are based on the CleanRL style of single-file PPO implementations rather than being the primary contribution.
 ## Focus
 
-This repository should be read primarily as a systems project for distributed RL communication, with a focus on how this communication can improve learning under real world constraints. The learner and actor scripts exist to exercise and evaluate the communication stack under buffering, stale rollout handling, reset policies, and outage scenarios.
+This project is a systems exploration of distributed RL communication under realistic constraints (latency, jitter, outages). The learner and actor entrypoints exist to stress and evaluate the communication layer under buffering pressure, stale rollout handling policies, actor resets, and simulated failure scenarios. 
 
-The core logic lives in `framework/`, while the top-level PPO files provide a concrete end-to-end workload for testing the transport and control-plane design.
+All core coordination and messaging logic lives in `framework/`, while the top-level PPO files provide a concrete end-to-end training loop to exercise the data plane and control plane.
 
 ## Architecture
 
-The runtime follows a standard actor-learner split. Actors instantiate an actor-only policy, request initial weights from the learner, collect rollouts, and send them back through ZeroMQ. The learner owns the full actor-critic model, waits for all actors to register, receives and merges rollout batches, computes advantages and optional experience weights, performs PPO updates, and broadcasts new actor weights back to the actors.
+<p align="center">
+  <img src="architecture.png" alt="DRL-ComLib architecture" width="500">
+</p>
 
-Communication is split across multiple ZeroMQ patterns: PUSH/PULL for rollout upload, PUB/SUB for weight and control broadcasts, and REQ/REP for the initial synchronisation handshake. This separation keeps the control plane explicit and makes it easier to test batching, delayed actors, resets, and network-outage behaviour independently of the PPO update logic.
+At runtime, DRL-ComLib follows a standard actor–learner split with an explicit communication boundary. Actors instantiate an actor-only policy, perform a one-shot REQ/REP handshake to register with the learner and obtain initial weights, then interact with their environments, buffer rollouts locally, and upload trajectory batches via ZeroMQ.
+
+The learner owns the full actor–critic model. It waits for a configurable number of actors to register, receives and merges incoming rollout batches, applies staleness filtering and optional experience weighting, runs PPO updates, and broadcasts updated actor weights back to all actors.
+
+Communication is factored across multiple ZeroMQ patterns: PUSH/PULL for rollout upload, PUB/SUB for policy and control broadcasts, and REQ/REP for the initial synchronisation handshake. This separation makes the control plane explicit and allows you to probe batching behaviour, delayed or slow actors, reset policies, and network-outage scenarios independently of the PPO update logic.
 
 ## Main components
 
