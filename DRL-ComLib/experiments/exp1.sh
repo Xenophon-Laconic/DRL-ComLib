@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Number of seeds
-SEEDS=(1 2 3 4 5)
-
-# Common hyperparameters
 ENV_ID="CartPole-v1"
 TOTAL_TIMESTEPS=500000
 NUM_STEPS=128
 NUM_MINIBATCHES=4
 
-# Addresses
+# Shared ZMQ addresses (single learner, multiple actors)
 PUSH_ADDR="tcp://localhost:5555"
 PULL_ADDR="tcp://localhost:5555"
 PUB_ADDR="tcp://localhost:5556"
@@ -18,131 +14,126 @@ SUB_ADDR="tcp://localhost:5556"
 REP_ADDR="tcp://localhost:5557"
 REQ_ADDR="tcp://localhost:5557"
 
-run_sync() {
-  local seed=$1
+kill_existing() {
+  echo "Killing existing learner/actor processes (if any)..."
+  pkill -f "ppo_learner.py" || true
+  pkill -f "ppo_actor.py" || true
+  pkill -f "uv run ppo_learner.py" || true
+  pkill -f "uv run ppo_actor.py" || true
+}
 
-  echo "=== Sync run, seed=${seed} ==="
+run_one_actor() {
+  local seed="$1"
+  echo "=== Running 1-actor experiment, seed ${seed} ==="
+  kill_existing
+
+  local num_actors=1
+  local exp_name="exp1_1actor_seed${seed}"
 
   # Start learner
   uv run ../ppo_learner.py \
     --env-id "${ENV_ID}" \
-    --total-timesteps ${TOTAL_TIMESTEPS} \
-    --num-steps ${NUM_STEPS} \
-    --num-minibatches ${NUM_MINIBATCHES} \
-    --seed ${seed} \
-    --num-actors 1 \
-    --learner-buffer-size 1 \
-    --max-batches-per-actor 1 \
-    --actor-cache-size 0 \
+    --total-timesteps "${TOTAL_TIMESTEPS}" \
+    --num-steps "${NUM_STEPS}" \
+    --num-minibatches "${NUM_MINIBATCHES}" \
+    --seed "${seed}" \
+    --num-actors "${num_actors}" \
     --staleness-threshold inf \
     --weighting-strategy uniform \
     --no-enable-policy-reset \
-    --simulate-outage-at 0 \
-    --outage-duration 0.0 \
     --push-addr "${PUSH_ADDR}" \
     --pull-addr "${PULL_ADDR}" \
     --pub-addr "${PUB_ADDR}" \
     --sub-addr "${SUB_ADDR}" \
     --rep-addr "${REP_ADDR}" \
     --req-addr "${REQ_ADDR}" \
-    --exp-name "exp1_sync_seed${seed}" \
-    &
+    --exp-name "${exp_name}" &
+  local learner_pid=$!
 
-  LEARNER_PID=$!
-
-  # Give learner time to bind sockets
-  sleep 1
-
-  # Start actor
+  # Start single actor
   uv run ../ppo_actor.py \
     --env-id "${ENV_ID}" \
-    --total-timesteps ${TOTAL_TIMESTEPS} \
-    --num-steps ${NUM_STEPS} \
-    --num-minibatches ${NUM_MINIBATCHES} \
-    --seed ${seed} \
-    --num-actors 1 \
-    --learner-buffer-size 1 \
-    --max-batches-per-actor 1 \
-    --actor-cache-size 0 \
+    --total-timesteps "${TOTAL_TIMESTEPS}" \
+    --num-steps "${NUM_STEPS}" \
+    --num-minibatches "${NUM_MINIBATCHES}" \
+    --seed "${seed}" \
+    --num-actors "${num_actors}" \
     --staleness-threshold inf \
     --weighting-strategy uniform \
     --no-enable-policy-reset \
-    --simulate-outage-at 0 \
-    --outage-duration 0.0 \
     --push-addr "${PUSH_ADDR}" \
     --pull-addr "${PULL_ADDR}" \
     --pub-addr "${PUB_ADDR}" \
     --sub-addr "${SUB_ADDR}" \
     --rep-addr "${REP_ADDR}" \
     --req-addr "${REQ_ADDR}" \
-    --exp-name "exp1_sync_seed${seed}" \
-    --actor-id 0
+    --exp-name "${exp_name}" \
+    --actor-id 0 &
 
-  # Wait for learner to finish
-  wait ${LEARNER_PID}
+  wait "${learner_pid}"
 }
 
-run_async() {
-  local seed=$1
+run_four_actors() {
+  local seed="$1"
+  echo "=== Running 4-actor experiment, seed ${seed} ==="
+  kill_existing
 
-  echo "=== Async run, seed=${seed} ==="
+  local num_actors=4
+  local exp_name="exp1_4actors_seed${seed}"
 
+  # Start learner
   uv run ../ppo_learner.py \
     --env-id "${ENV_ID}" \
-    --total-timesteps ${TOTAL_TIMESTEPS} \
-    --num-steps ${NUM_STEPS} \
-    --num-minibatches ${NUM_MINIBATCHES} \
-    --seed ${seed} \
-    --num-actors 1 \
-    --learner-buffer-size 4 \
-    --max-batches-per-actor 4 \
-    --actor-cache-size 0 \
+    --total-timesteps "${TOTAL_TIMESTEPS}" \
+    --num-steps "${NUM_STEPS}" \
+    --num-minibatches "${NUM_MINIBATCHES}" \
+    --seed "${seed}" \
+    --num-actors "${num_actors}" \
     --staleness-threshold inf \
     --weighting-strategy uniform \
     --no-enable-policy-reset \
-    --simulate-outage-at 0 \
-    --outage-duration 0.0 \
     --push-addr "${PUSH_ADDR}" \
     --pull-addr "${PULL_ADDR}" \
     --pub-addr "${PUB_ADDR}" \
     --sub-addr "${SUB_ADDR}" \
     --rep-addr "${REP_ADDR}" \
     --req-addr "${REQ_ADDR}" \
-    --exp-name "exp1_async_seed${seed}" \
-    &
+    --exp-name "${exp_name}" &
+  local learner_pid=$!
 
-  LEARNER_PID=$!
-  sleep 1
+  # Start 4 actors
+  for actor_id in 0 1 2 3; do
+    uv run ../ppo_actor.py \
+      --env-id "${ENV_ID}" \
+      --total-timesteps "${TOTAL_TIMESTEPS}" \
+      --num-steps "${NUM_STEPS}" \
+      --num-minibatches "${NUM_MINIBATCHES}" \
+      --seed "${seed}" \
+      --num-actors "${num_actors}" \
+      --staleness-threshold inf \
+      --weighting-strategy uniform \
+      --no-enable-policy-reset \
+      --push-addr "${PUSH_ADDR}" \
+      --pull-addr "${PULL_ADDR}" \
+      --pub-addr "${PUB_ADDR}" \
+      --sub-addr "${SUB_ADDR}" \
+      --rep-addr "${REP_ADDR}" \
+      --req-addr "${REQ_ADDR}" \
+      --exp-name "${exp_name}" \
+      --actor-id "${actor_id}" &
+  done
 
-  uv run ../ppo_actor.py \
-    --env-id "${ENV_ID}" \
-    --total-timesteps ${TOTAL_TIMESTEPS} \
-    --num-steps ${NUM_STEPS} \
-    --num-minibatches ${NUM_MINIBATCHES} \
-    --seed ${seed} \
-    --num-actors 1 \
-    --learner-buffer-size 4 \
-    --max-batches-per-actor 4 \
-    --actor-cache-size 0 \
-    --staleness-threshold inf \
-    --weighting-strategy uniform \
-    --no-enable-policy-reset \
-    --simulate-outage-at 0 \
-    --outage-duration 0.0 \
-    --push-addr "${PUSH_ADDR}" \
-    --pull-addr "${PULL_ADDR}" \
-    --pub-addr "${PUB_ADDR}" \
-    --sub-addr "${SUB_ADDR}" \
-    --rep-addr "${REP_ADDR}" \
-    --req-addr "${REQ_ADDR}" \
-    --exp-name "exp1_async_seed${seed}" \
-    --actor-id 0
-
-  wait ${LEARNER_PID}
+  wait "${learner_pid}"
 }
 
-# Main loop over seeds
-for s in "${SEEDS[@]}"; do
-  run_sync "${s}"
-  run_async "${s}"
-done
+main() {
+  # seeds 1..5
+  for seed in 1 2 3 4 5; do
+    run_one_actor "${seed}"
+    run_four_actors "${seed}"
+  done
+
+  echo "All runs completed."
+}
+
+main "$@"
