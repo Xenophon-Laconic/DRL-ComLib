@@ -1,4 +1,6 @@
-__pycache__
+__pycache__/
 runs/
-runs2/
-runs3/
+videos/
+.venv/
+image.py 
+output/
