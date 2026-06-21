@@ -150,6 +150,12 @@ class CommsArgs:
     outage_duration: float = 0.0
     """Duration of the simulated outage in seconds."""
 
+    simulate_latency: bool = False
+    """If True, inject synthetic latency before sending each rollout."""
+
+    latency_ms: float = 0.0
+    """Fixed synthetic latency in milliseconds per rollout when simulate_latency is True."""
+
 
 @dataclass
 class Args(AlgorithmArgs, CommsArgs):
@@ -180,6 +186,8 @@ def validate_args(args: Args) -> None:
         )
     if args.video_every_n_episodes < 0:
         raise ValueError("video_every_n_episodes cannot be negative")
+    if args.latency_ms < 0:
+        raise ValueError("latency_ms cannot be negative")
 
 
 def populate_runtime_args(args: Args) -> Args:

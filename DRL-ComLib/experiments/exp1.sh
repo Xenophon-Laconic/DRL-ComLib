@@ -128,7 +128,7 @@ run_four_actors() {
 
 main() {
   # seeds 1..5
-  for seed in 1 2 3 4 5; do
+  for seed in 1 2 3; do
     run_one_actor "${seed}"
     run_four_actors "${seed}"
   done
