@@ -7,7 +7,7 @@ dot.attr('node', shape='box', style='rounded,filled', fontname='Helvetica', font
 dot.node('learner', 'Central Learner', fillcolor='#c6dbef')
 
 dot.attr('node', shape='ellipse', style='filled', fillcolor='#f0f0f0', fontsize='11')
-dot.node('transport', 'ZeroMQ\nPUSH/PULL, PUB/SUB')
+dot.node('transport', 'DRL-ComLib\nInterface')
 
 dot.attr('edge', fontsize='9')
 
@@ -20,10 +20,10 @@ def white_label(text):
 
 # Learner <-> transport with white box labels
 # Add spaces before "rollouts" so the label sits a bit to the left
-dot.edge('learner', 'transport',
+dot.edge('transport','learner',
          label=white_label('  rollouts'),  # two leading spaces
          arrowsize='0.8')
-dot.edge('transport', 'learner',
+dot.edge('learner', 'transport',
          label=white_label('weights'),
          style='dashed', arrowsize='0.8')
 

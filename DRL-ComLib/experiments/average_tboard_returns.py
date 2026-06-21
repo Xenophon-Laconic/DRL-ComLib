@@ -8,6 +8,22 @@ from tbparse import SummaryReader  # pip install tbparse
 import matplotlib.pyplot as plt
 import math
 
+
+"""
+run with:
+
+uv run average_tboard_returns.py \
+  --logdir-base runs \
+  --pattern "CartPole-v1__exp1_4actors_seed" \
+  --tag "charts/episodic_return" \
+  --output-csv averages/exp1_4actors_episode_return.csv \
+  --output-png figures/exp1_4actors_episode_return.png \
+  --title "Experiment 1: 4 actors" \
+  --ylabel "Episode return" \
+  --smooth-weight 0.99
+
+"""
+
 def tensorboard_smooth(values, weight=0.99):
     """
     TensorBoard-style exponential smoothing (approximate).

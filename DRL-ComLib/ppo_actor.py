@@ -100,6 +100,10 @@ if __name__ == "__main__":
             if handle_sync_status(comms.sync_weights(actor), args.actor_id):
                 break
 
+            # Inject synthetic latency before sending the rollout, if enabled.
+            if args.simulate_latency and args.latency_ms > 0.0:
+                time.sleep(args.latency_ms / 1000.0)
+
             comms.send_batch(batch, episode_stats)
 
             if handle_sync_status(comms.sync_weights(actor), args.actor_id):
