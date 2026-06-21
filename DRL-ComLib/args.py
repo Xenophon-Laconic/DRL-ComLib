@@ -76,7 +76,7 @@ class AlgorithmArgs:
     target_kl: float | None = None
     """Optional KL threshold for early PPO epoch stopping."""
 
-    video_every_n_episodes: int = 1_000
+    video_every_n_episodes: int = 0
     """Actor-side video cadence. 0 disables video recording."""
 
     batch_size: int = 0
